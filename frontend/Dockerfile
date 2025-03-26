@@ -1,21 +1,22 @@
-FROM node:18-alpine
-
+# Stage 1: Build
+FROM node:18-alpine as builder
 WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
 RUN npm install
 
-# Copy source code
+# Copy source and build
 COPY . .
-
-# Build the app
 RUN npm run build
 
-# Production environment
-ENV NODE_ENV=production
-ENV REACT_APP_API_URL=http://ai-service:5000
+# Stage 2: Production
+FROM nginx:alpine
+COPY --from=builder /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 3000
+# Copy your Tailwind config
+COPY tailwind.config.js /usr/share/nginx/html/
 
-CMD ["npm", "start"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

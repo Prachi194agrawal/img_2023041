@@ -70,10 +70,42 @@ services:
       - kafka
       - ai-service
 
+  
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development # Use 'production' for final build
     ports:
       - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://ai-service:5000
+      - REACT_APP_WS_URL=ws://ai-service:5000/ws
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules # Prevent host/node_modules collision
+    networks:
+      - frontend-network
+      - backend-network
+    depends_on:
+      - ai-service
+      - kafka
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Add these network definitions at the bottom
+networks:
+  frontend-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: frontend-net
+  backend-network:
+    driver: bridge
 
   blockchain-node:
     image: hyperledger/fabric-peer:2.3
