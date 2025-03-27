@@ -1,11 +1,16 @@
 import os
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
+import joblib
+import numpy as np
+from pydantic import BaseModel
+from typing import List, Dict, Any
+import json
 
-# Load environment variables from .env file if it exists
+# Load environment variables
 load_dotenv()
 
 # Configure logging
@@ -17,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Fraud Detection API",
-    description="API for real-time fraud detection using Kafka and ML",
+    description="API for real-time fraud detection",
     version="1.0.0"
 )
 
@@ -30,38 +35,92 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Import services after FastAPI initialization to avoid circular imports
-from ai_service.app import app as ai_app
-from streaming_service.kafka_consumer import app as streaming_app
+# Load the model
+MODEL_PATH = os.getenv("MODEL_PATH", "ai_service/fraud_model.pkl")
+try:
+    model = joblib.load(MODEL_PATH)
+    logger.info(f"Model loaded successfully from {MODEL_PATH}")
+except Exception as e:
+    logger.error(f"Error loading model: {e}")
+    model = None
 
-# Mount the services
-app.mount("/ai", ai_app)
-app.mount("/streaming", streaming_app)
+class Transaction(BaseModel):
+    amount: float
+    time: int
+    v1: float
+    v2: float
+    v3: float
+    v4: float
+    v5: float
+    v6: float
+    v7: float
+    v8: float
+    v9: float
+    v10: float
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    logger.info("Health check requested")
     return {
         "status": "healthy",
-        "environment": os.getenv("ENV", "development"),
-        "services": {
-            "ai": "mounted",
-            "streaming": "mounted"
-        }
+        "model_loaded": model is not None
     }
+
+@app.post("/predict")
+async def predict(transaction: Transaction):
+    """Predict if a transaction is fraudulent"""
+    if model is None:
+        return {"error": "Model not loaded"}
+    
+    try:
+        # Convert transaction to numpy array
+        features = np.array([[
+            transaction.amount, transaction.time,
+            transaction.v1, transaction.v2, transaction.v3,
+            transaction.v4, transaction.v5, transaction.v6,
+            transaction.v7, transaction.v8, transaction.v9,
+            transaction.v10
+        ]])
+        
+        # Make prediction
+        prediction = model.predict(features)[0]
+        probability = model.predict_proba(features)[0][1]
+        
+        return {
+            "is_fraud": bool(prediction),
+            "probability": float(probability),
+            "transaction_amount": transaction.amount
+        }
+    except Exception as e:
+        logger.error(f"Prediction error: {e}")
+        return {"error": str(e)}
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time predictions"""
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            transaction_data = json.loads(data)
+            
+            # Create Transaction object
+            transaction = Transaction(**transaction_data)
+            
+            # Get prediction
+            result = await predict(transaction)
+            
+            # Send back the result
+            await websocket.send_json(result)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        await websocket.close()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    debug = os.getenv("DEBUG", "False").lower() == "true"
-    
-    logger.info(f"Starting server on port {port}")
-    logger.info(f"Debug mode: {debug}")
-    
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
         port=port,
-        reload=debug,
-        log_level="info"
+        reload=True
     ) 
