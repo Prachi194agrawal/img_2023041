@@ -1,17 +1,21 @@
-FROM confluentinc/cp-kafka:7.0.1
+FROM python:3.9-slim
 
 WORKDIR /app
 
-# Install Python and dependencies
-RUN apt-get update && \
-    apt-get install -y python3-pip && \
-    pip install kafka-python numpy
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY kafka_producer.py .
-COPY kafka_consumer.py .
+# Copy application files
+COPY . .
 
-# Kafka configuration
+# Environment variables
 ENV KAFKA_BOOTSTRAP_SERVERS=kafka:9092
 ENV KAFKA_TRANSACTION_TOPIC=bank_transactions
+ENV AI_SERVICE_URL=http://ai-service:5000
 
-CMD ["python3", "kafka_producer.py"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
+
+CMD ["python", "kafka_consumer.py"]

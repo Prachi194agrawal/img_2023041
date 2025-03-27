@@ -56,58 +56,112 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   ai-service:
     build: ./ai-service
     ports:
       - "5000:5000"
-    depends_on:
-      - kafka
-
-  streaming-service:
-    build: ./streaming-service
-    depends_on:
-      - kafka
-      - ai-service
-
-  
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: development # Use 'production' for final build
-    ports:
-      - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - REACT_APP_API_URL=http://ai-service:5000
-      - REACT_APP_WS_URL=ws://ai-service:5000/ws
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MODEL_PATH=/app/fraud_model.pkl
     volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      - /app/node_modules # Prevent host/node_modules collision
+      - ./ai-service:/app
     networks:
-      - frontend-network
       - backend-network
     depends_on:
-      - ai-service
-      - kafka
+      kafka:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Add these network definitions at the bottom
-networks:
-  frontend-network:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.name: frontend-net
-  backend-network:
-    driver: bridge
+  streaming-service:
+    build: 
+      context: ./streaming-service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - AI_SERVICE_URL=http://ai-service:5000
+    networks:
+      - backend-network
+    depends_on:
+      ai-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: ${NODE_ENV:-development}
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${PORT:-3000}
+      - VITE_API_URL=http://localhost:5000
+      - VITE_WS_URL=ws://localhost:5000/ws
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules
+    networks:
+      - frontend-network
+      - backend-network
+    depends_on:
+      ai-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3000}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   blockchain-node:
     image: hyperledger/fabric-peer:2.3
     ports:
       - "7051:7051"
+    environment:
+      - CORE_PEER_ID=peer0.org1.example.com
+      - CORE_PEER_ADDRESS=peer0.org1.example.com:7051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp
+    volumes:
+      - ./blockchain-service/crypto:/etc/hyperledger/msp
+      - blockchain_data:/var/hyperledger/production
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD", "peer", "node", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  frontend-network:
+    driver: bridge
+  backend-network:
+    driver: bridge
+
+volumes:
+  kafka_data:
+  blockchain_data:
