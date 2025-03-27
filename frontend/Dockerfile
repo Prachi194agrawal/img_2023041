@@ -17,19 +17,21 @@ CMD ["npm", "run", "dev", "--", "--host"]
 FROM node:18-alpine as builder
 WORKDIR /app
 
+# Install dependencies
 COPY package*.json ./
 RUN npm install
 
+# Copy source and build
 COPY . .
 RUN npm run build
 
-# Stage 3: Production
-FROM nginx:alpine as production
+# Production stage
+FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Add nginx config
 RUN echo 'server { \
-    listen 80; \
+    listen $PORT; \
     location / { \
         root /usr/share/nginx/html; \
         index index.html index.htm; \
@@ -37,5 +39,5 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# Use shell form for CMD to use environment variable
+CMD sed -i -e 's/$PORT/'"$PORT"'/g' /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'

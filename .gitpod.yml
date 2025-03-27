@@ -1,0 +1,27 @@
+image:
+  file: .gitpod.Dockerfile
+
+ports:
+  - port: 3000
+    onOpen: open-preview
+    visibility: public
+  - port: 5000
+    visibility: public
+  - port: 8000
+    visibility: public
+  - port: 9092
+    visibility: public
+
+tasks:
+  - name: Start Services
+    init: |
+      docker-compose build
+    command: |
+      docker-compose up
+
+vscode:
+  extensions:
+    - ms-azuretools.vscode-docker
+    - ms-python.python
+    - dbaeumer.vscode-eslint
+    - esbenp.prettier-vscode 
