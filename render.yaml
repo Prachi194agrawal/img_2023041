@@ -1,14 +1,17 @@
 services:
   - type: web
-    name: img_2023041-1
+    name: img_2023041-2
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
+      python ai_service/train_model.py
+      mv fraud_model.pkl /opt/render/project/src/
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PORT
         value: 8000
       - key: MODEL_PATH
-        value: /opt/render/project/src/ai_service/fraud_model.pkl
+        value: /opt/render/project/src/fraud_model.pkl
       - key: PYTHONUNBUFFERED
         value: "1"
     healthCheckPath: /health
@@ -22,6 +25,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: VITE_API_URL
-        value: https://img_2023041-1.onrender.com
+        value: https://img_2023041-2.onrender.com
       - key: VITE_WS_URL
-        value: wss://img_2023041-1.onrender.com/ws 
+        value: wss://img_2023041-2.onrender.com/ws 
