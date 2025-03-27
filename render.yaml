@@ -1,23 +1,33 @@
 services:
   - type: web
-    name: fraud-detection-service
+    name: img_2023041-1
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
+    buildCommand: |
+      pip install -r requirements.txt
+      pip install -e .
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.12
       - key: PORT
         value: 8000
+      - key: MODEL_PATH
+        value: /opt/render/project/src/ai_service/fraud_model.pkl
       - key: KAFKA_BOOTSTRAP_SERVERS
         value: kafka:9092
-      - key: MODEL_PATH
-        value: /app/ai_service/fraud_model.pkl
+      - key: AI_SERVICE_URL
+        value: http://localhost:5000
+      - key: DEBUG
+        value: "True"
+      - key: PYTHONPATH
+        value: /opt/render/project/src
+      - key: PYTHONUNBUFFERED
+        value: "1"
     healthCheckPath: /health
     autoDeploy: true
 
   - type: web
-    name: fraud-detection-frontend
+    name: img_2023041-frontend
     env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
@@ -25,6 +35,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: VITE_API_URL
-        value: https://fraud-detection-service.onrender.com
+        value: https://img_2023041-1.onrender.com
       - key: VITE_WS_URL
-        value: wss://fraud-detection-service.onrender.com 
+        value: wss://img_2023041-1.onrender.com 
