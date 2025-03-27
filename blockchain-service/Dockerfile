@@ -6,6 +6,8 @@ WORKDIR /chaincode
 COPY chaincode/package.json .
 RUN npm install
 
+
+
 # Copy chaincode
 COPY chaincode/. .
 
